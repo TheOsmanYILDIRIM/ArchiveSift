@@ -27,7 +27,7 @@ jobs:
       - id: tag
         shell: bash
         env:
-          REQUESTED_TAG: ${{ needs.prepare.outputs.tag }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           tag="$REQUESTED_TAG"
