@@ -2,7 +2,6 @@ name: Android tests and debug APK
 on:
   push:
     branches: ['main', 'feature/android-mvp']
-    paths-ignore: ['.github/workflows/**']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -27,7 +26,7 @@ jobs:
         with:
           gradle-version: '8.9'
       - run: gradle --no-daemon :core:test :app:lintDebug :app:assembleDebug
-      - name: Verify manifest permissions
+      - name: Verify the debug APK does not request network or broad storage access
         shell: bash
         run: |
           set -euo pipefail
