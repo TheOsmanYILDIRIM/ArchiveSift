@@ -1,0 +1,56 @@
+name: Android tests and debug APK
+on:
+  push:
+    branches: ['main', 'feature/android-mvp']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LANG: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Ensure Android SDK 35 is installed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f "$ANDROID_HOME/platforms/android-35/android.jar" || ! -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]]; then
+            sdkmanager=$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -n 1)
+            test -x "$sdkmanager"
+            "$sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          fi
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: gradle --no-daemon :core:test :app:lintDebug :app:assembleDebug
+      - name: Verify the debug APK does not request network or broad storage access
+        shell: bash
+        run: |
+          set -euo pipefail
+          permissions=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions app/build/outputs/apk/debug/app-debug.apk)
+          if grep -Eq 'android\.permission\.(INTERNET|MANAGE_EXTERNAL_STORAGE|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE)' <<< "$permissions"; then
+            echo 'Unexpected permission in the merged APK manifest.'; exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ArchiveSift-test-and-lint-reports
+          path: |
+            core/build/reports/tests/test/
+            app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArchiveSift-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

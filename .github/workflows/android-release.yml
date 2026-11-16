@@ -1,0 +1,119 @@
+name: Publish signed APK
+on:
+  push:
+    branches: [main]
+    paths: ['app/build.gradle.kts']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'New release tag (for example, v0.1.0)'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: archivesift-signed-release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: tag
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" ]]; then
+            tag=v$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts)
+          fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]]
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+  sign:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LANG: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Ensure Android SDK 35 is installed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f "$ANDROID_HOME/platforms/android-35/android.jar" || ! -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]]; then
+            sdkmanager=$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -n 1)
+            test -x "$sdkmanager"
+            "$sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          fi
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: gradle --no-daemon :core:test :app:lintRelease :app:assembleRelease
+      - name: Sign and verify release APK
+        shell: bash
+        env:
+          KS_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${KS_BASE64:?Missing ANDROID_KEYSTORE_BASE64}" "${KS_PASS:?Missing ANDROID_KEYSTORE_PASSWORD}" "${KEY_ALIAS:?Missing ANDROID_KEY_ALIAS}" "${KEY_PASS:?Missing ANDROID_KEY_PASSWORD}"
+          umask 077
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          printf '%s' "$KS_BASE64" | base64 --decode > "$work/signing.keystore"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/zipalign" -f -p 4 app/build/outputs/apk/release/app-release-unsigned.apk "$work/aligned.apk"
+          mkdir -p release
+          "$tools/apksigner" sign --ks "$work/signing.keystore" --ks-key-alias "$KEY_ALIAS" --ks-pass env:KS_PASS --key-pass env:KEY_PASS --out release/ArchiveSift-release.apk "$work/aligned.apk"
+          "$tools/apksigner" verify --verbose --print-certs release/ArchiveSift-release.apk
+          (cd release && sha256sum ArchiveSift-release.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArchiveSift-verified-release
+          path: release/
+          if-no-files-found: error
+  publish:
+    runs-on: ubuntu-latest
+    needs: [prepare, sign]
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ArchiveSift-verified-release
+          path: release
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9][a-zA-Z0-9.-]*)?$ ]] || { echo 'Invalid release tag.'; exit 1; }
+          if git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$TAG"; then
+            echo 'Tag already exists.'; exit 1
+          else
+            status=$?
+            [[ "$status" -eq 2 ]] || exit "$status"
+          fi
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          gh release create "$TAG" release/ArchiveSift-release.apk release/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "ArchiveSift $TAG" \
+            --notes "Signed ArchiveSift APK built from $GITHUB_SHA. Browse, filter, and export files from ZIP archives or local folders offline. Verify the download using the attached SHA-256 checksum."
