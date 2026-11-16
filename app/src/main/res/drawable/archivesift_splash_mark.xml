@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The system masks a central circle. Keep the tile inside its safe area. -->
+    <item android:width="288dp" android:height="288dp">
+        <shape android:shape="rectangle"><solid android:color="@android:color/transparent" /></shape>
+    </item>
+    <item android:width="136dp" android:height="136dp" android:gravity="center"
+        android:drawable="@drawable/archivesift_mark" />
+</layer-list>

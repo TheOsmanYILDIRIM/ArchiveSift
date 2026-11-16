@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="archivesift_launch_background">#17102B</color>
+    <color name="archivesift_launcher_background">#402076</color>
+
+    <style name="Theme.ArchiveSift.Base" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/archivesift_launch_background</item>
+        <item name="android:statusBarColor">@color/archivesift_launch_background</item>
+        <item name="android:navigationBarColor">@color/archivesift_launch_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="Theme.ArchiveSift" parent="Theme.ArchiveSift.Base">
+        <item name="android:windowBackground">@drawable/archivesift_launch_legacy</item>
+    </style>
+</resources>

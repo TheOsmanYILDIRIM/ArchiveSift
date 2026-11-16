@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#291748"
+                android:centerColor="@color/archivesift_launch_background" android:endColor="#211239" />
+        </shape>
+    </item>
+    <item android:width="104dp" android:height="104dp" android:gravity="center"
+        android:drawable="@drawable/archivesift_mark" />
+</layer-list>

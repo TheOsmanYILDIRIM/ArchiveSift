@@ -7,3 +7,9 @@
 - [Release run 43943136519](https://github.com/TheOsmanYILDIRIM/ArchiveSift/actions/runs/43943136519) passed core tests, release lint and unsigned release assembly. Signing stopped because `ANDROID_KEYSTORE_BASE64` was unavailable. No release was published.
 - Add the long-lived ArchiveSift signing keystore and the corresponding four Actions secrets, then rerun the failed signing job or dispatch **Publish signed APK** on main with tag `v0.1.0`. Do not replace the key with a debug or per-run key. See README for the secret names.
 - Emulator and physical-device tests: not performed.
+
+## Launcher and startup branding
+
+- The generated purple archive mark is stored once as a 192 × 192 WebP (5,294 bytes) and shared by the adaptive launcher and launch screen.
+- Android 12+ uses the native splash screen with a deep-purple background. Android 8–11 uses a dark gradient launch window and the same centered mark. No artificial delay or simulated progress bar is added; the Compose screens still follow system theme settings.
+- This change does not modify release signing. Verify the GitHub Actions result for this commit separately from cold-start behavior on a device.
