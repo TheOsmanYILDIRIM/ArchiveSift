@@ -13,3 +13,4 @@
 - The generated purple archive mark is stored once as a 192 × 192 WebP (5,294 bytes) and shared by the adaptive launcher and launch screen.
 - Android 12+ uses the native splash screen with a deep-purple background. Android 8–11 uses a dark gradient launch window and the same centered mark. No artificial delay or simulated progress bar is added; the Compose screens still follow system theme settings.
 - This change does not modify release signing. Verify the GitHub Actions result for this commit separately from cold-start behavior on a device.
+- Branding CI run [43950502471](https://github.com/TheOsmanYILDIRIM/ArchiveSift/actions/runs/43950502471) failed Android lint: the base theme used `windowLightNavigationBar` (API 27+) with minSdk 26. Removed the redundant `false` override; the dark parent theme keeps light navigation icons by default. The dark launch backgrounds and icon are unchanged. Verify the replacement CI and device startup separately.
