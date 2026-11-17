@@ -14,6 +14,17 @@ class CoreTest {
         check(!compileRules(listOf(Rule(false, Mode.Glob, "a/*.txt"))).matches("a/b/c.txt"))
     }
 
+    @Test fun longRegexIsNotTruncated() {
+        val alternatives = (0..600).joinToString("|") { "block_model_$it" }
+        val regex = "(^|/)(?:$alternatives|last_model)\\.json$"
+        check(regex.length > 1024)
+        val compiled = compileRules(listOf(Rule(false, Mode.Regex, regex)))
+        check(compiled.errors.isEmpty() && compiled.matches("assets/last_model.json"))
+        check(!compiled.matches("assets/last_model.json.bak"))
+        check(compileRules(listOf(Rule(false, Mode.Regex, "a".repeat(MAX_REGEX_LENGTH + 1)))).errors.containsKey(0))
+        check(compileRules(listOf(Rule(false, Mode.Glob, "a".repeat(MAX_GLOB_LENGTH + 1)))).errors.containsKey(0))
+    }
+
     @Test fun invalidRegex() {
         for (bad in listOf("(", "(?<=x)y", "(x)\\1", "x(?=y)")) {
             val compiled = compileRules(listOf(Rule(false, Mode.Regex, bad)))

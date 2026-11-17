@@ -3,7 +3,12 @@ package com.archivesift.core
 import com.google.re2j.Pattern
 import com.google.re2j.PatternSyntaxException
 
+const val MAX_REGEX_LENGTH = 32_768
+const val MAX_GLOB_LENGTH = 1_024
+
 enum class Mode { Glob, Regex }
+
+fun patternLimit(mode: Mode): Int = if (mode == Mode.Regex) MAX_REGEX_LENGTH else MAX_GLOB_LENGTH
 data class Rule(val exclude: Boolean, val mode: Mode, val text: String)
 data class Rules(val errors: Map<Int, String>, private val matchers: List<Pair<Rule, Pattern>>) {
     fun matches(path: String): Boolean {
@@ -17,7 +22,8 @@ fun compileRules(rules: List<Rule>): Rules {
     val errors = mutableMapOf<Int, String>()
     val matchers = rules.mapIndexedNotNull { i, r ->
         try {
-            require(r.text.isNotEmpty() && r.text.length <= 1024) { "Enter a pattern of 1–1024 characters." }
+            val limit = patternLimit(r.mode)
+            require(r.text.isNotEmpty() && r.text.length <= limit) { "Enter a pattern of 1–$limit characters." }
             r to Pattern.compile(if (r.mode == Mode.Regex) r.text else glob(r.text))
         } catch (e: PatternSyntaxException) { errors[i] = e.description; null } catch (e: IllegalArgumentException) { errors[i] = e.message ?: "Invalid pattern"; null }
     }

@@ -9,7 +9,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.archivesift.core.*
 import kotlinx.coroutines.*
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -124,6 +127,31 @@ class SiftModel(private val app: Application) : AndroidViewModel(app) {
             check(); f
         } catch (e: Exception) { f.delete(); throw e }
     }, { shareFile = it })
+
+    fun readRegexFile(uri: Uri, finish: (String) -> Unit) = run("Reading regex…", { check, _ ->
+        // Allow UTF-8 multibyte text, a BOM and a final CRLF.
+        val limit = MAX_REGEX_LENGTH * 4L + 5
+        val bytes = ByteArrayOutputStream()
+        (resolver.openInputStream(uri) ?: throw IOException("Could not open the regex file.")).use {
+            copyBounded(it, bytes, ByteBudget(limit), limit, check)
+        }
+        val decoded = try {
+            Charsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes.toByteArray())).toString()
+        } catch (e: CharacterCodingException) {
+            throw IOException("Use a UTF-8 text file containing one regex.", e)
+        }
+        val pattern = decoded.removePrefix("\uFEFF").let {
+            when {
+                it.endsWith("\r\n") -> it.dropLast(2)
+                it.endsWith("\n") || it.endsWith("\r") -> it.dropLast(1)
+                else -> it
+            }
+        }
+        require(pattern.isNotEmpty()) { "The regex file is empty." }
+        require(pattern.length <= MAX_REGEX_LENGTH) { "Regex exceeds $MAX_REGEX_LENGTH characters." }
+        check()
+        pattern
+    }, finish)
 
     fun refreshPresets() = run("Loading presets…", { _, _ -> presets.names() }, { presetNames = it })
     fun savePreset(name: String, snapshot: List<Rule> = rules) {

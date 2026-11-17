@@ -1,6 +1,7 @@
 package com.archivesift
 
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -80,6 +81,37 @@ private fun SiftScreen(m: SiftModel, launchShare: (java.io.File) -> Unit) {
     var showRules by rememberSaveable { mutableStateOf(false) }
     var showPresets by rememberSaveable { mutableStateOf(false) }
     var quickPattern by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    fun applyPattern(value: String, mode: Mode, edit: (String) -> Unit) {
+        val limit = patternLimit(mode)
+        if (value.length > limit) m.message = "Pattern exceeds $limit characters; nothing was changed."
+        else { m.message = ""; edit(value) }
+    }
+    fun pastePattern(mode: Mode, edit: (String) -> Unit) {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        val clip = clipboard?.primaryClip
+        val value = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+        if (value.isNullOrEmpty()) m.message = "No text to paste."
+        else applyPattern(value, mode, edit)
+    }
+    var regexFileTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    val regexFile = rememberLauncherForActivityResult(Pick.OpenDocument()) { uri ->
+        val target = regexFileTarget
+        regexFileTarget = null
+        if (uri != null && target != null) {
+            val original = m.rules.getOrNull(target)
+            if (target == -1 || original?.mode == Mode.Regex) m.readRegexFile(uri) { pattern ->
+                if (target == -1) quickPattern = pattern
+                else if (m.rules.getOrNull(target) == original && original != null) {
+                    m.rules = m.rules.toMutableList().also { it[target] = original.copy(text = pattern) }
+                }
+            }
+        }
+    }
+    fun pickRegexFile(target: Int) {
+        regexFileTarget = target
+        regexFile.launch(arrayOf("*/*"))
+    }
     var home by rememberSaveable { mutableStateOf(true) }
     var saveKind by rememberSaveable { mutableStateOf<String?>(null) }
     var presetName by rememberSaveable { mutableStateOf("") }
@@ -170,7 +202,7 @@ private fun SiftScreen(m: SiftModel, launchShare: (java.io.File) -> Unit) {
                 }
             }
             item {
-                OutlinedTextField(quickPattern, { quickPattern = it.take(1024) }, Modifier.fillMaxWidth(),
+                OutlinedTextField(quickPattern, { applyPattern(it, Mode.Regex) { value -> quickPattern = value } }, Modifier.fillMaxWidth(),
                     label = { Text("Quick regex (optional)") }, placeholder = { Text("\\.json$") }, singleLine = true,
                     enabled = !m.busy, isError = quickError != null,
                     supportingText = { Text(quickError ?: "Applies only to the next source unless saved.") },
@@ -180,7 +212,11 @@ private fun SiftScreen(m: SiftModel, launchShare: (java.io.File) -> Unit) {
                 if (quickPattern.isEmpty()) m.nextPreset?.let { (label, _) ->
                     TextButton({ m.nextPreset = null }, enabled = !m.busy) { Text("Clear preset: $label", maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
-                if (quickPattern.isNotEmpty()) TextButton({ quickPattern = "" }, enabled = !m.busy) { Text("Clear regex") }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton({ pastePattern(Mode.Regex) { quickPattern = it } }, enabled = !m.busy) { Text("Paste") }
+                    TextButton({ pickRegexFile(-1) }, enabled = !m.busy) { Text("Choose file") }
+                    if (quickPattern.isNotEmpty()) TextButton({ quickPattern = "" }, enabled = !m.busy) { Text("Clear") }
+                }
             }
             if (m.sourceLabel.isNotEmpty()) item { TextButton({ home = false }, enabled = !m.busy) { Text("Back to current files") } }
         } else Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
@@ -247,6 +283,9 @@ private fun SiftScreen(m: SiftModel, launchShare: (java.io.File) -> Unit) {
                 TextButton({ showRules = false; presets() }, enabled = !m.busy) { Text("Presets") }
                 TextButton({ showRules = false }) { Text("Done") }
             }
+            if (m.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (m.message.isNotEmpty()) Text(m.message, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.clickable { m.message = "" })
             LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(rules.size) { index ->
                     val rule = rules[index]; val error = compiled.errors[index]
@@ -256,8 +295,13 @@ private fun SiftScreen(m: SiftModel, launchShare: (java.io.File) -> Unit) {
                         FilterChip(rule.mode == Mode.Regex, { change(rule.copy(mode = if (rule.mode == Mode.Glob) Mode.Regex else Mode.Glob)) }, { Text(rule.mode.name) }, enabled = !m.busy)
                         TextButton({ m.rules = m.rules.filterIndexed { i, _ -> i != index } }, enabled = !m.busy) { Text("Remove") }
                     }
-                    OutlinedTextField(rule.text, { change(rule.copy(text = it.take(1024))) }, Modifier.fillMaxWidth(), label = { Text("Pattern ${index + 1}") },
-                        singleLine = true, isError = error != null, supportingText = if (error == null) null else { { Text(error) } }, enabled = !m.busy)
+                    OutlinedTextField(rule.text, { applyPattern(it, rule.mode) { value -> change(rule.copy(text = value)) } },
+                        Modifier.fillMaxWidth(), label = { Text("Pattern ${index + 1}") }, singleLine = true,
+                        isError = error != null, supportingText = if (error == null) null else { { Text(error) } }, enabled = !m.busy)
+                    if (rule.mode == Mode.Regex) FlowRow {
+                        TextButton({ pastePattern(rule.mode) { change(rule.copy(text = it)) } }, enabled = !m.busy) { Text("Paste") }
+                        TextButton({ pickRegexFile(index) }, enabled = !m.busy) { Text("Choose file") }
+                    }
                 }
                 item {
                     FlowRow {

@@ -8,7 +8,8 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
-private const val PRESET_LIMIT = 128L * 1024
+// JSON can use up to six bytes per UTF-16 code unit when escaping a rule.
+private const val PRESET_LIMIT = 8L * 1024 * 1024
 const val MAX_RULES = 32
 fun encodePreset(name: String, rules: List<Rule>): String = JSONObject().put("version", 1).put("name", name)
     .put("rules", JSONArray().also { array -> rules.forEach {

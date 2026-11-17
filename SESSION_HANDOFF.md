@@ -14,3 +14,8 @@
 - Android 12+ uses the native splash screen with a deep-purple background. Android 8–11 uses a dark gradient launch window and the same centered mark. No artificial delay or simulated progress bar is added; the Compose screens still follow system theme settings.
 - This change does not modify release signing. Verify the GitHub Actions result for this commit separately from cold-start behavior on a device.
 - Branding CI run [43950502471](https://github.com/TheOsmanYILDIRIM/ArchiveSift/actions/runs/43950502471) failed Android lint: the base theme used `windowLightNavigationBar` (API 27+) with minSdk 26. Removed the redundant `false` override; the dark parent theme keeps light navigation icons by default. The dark launch backgrounds and icon are unchanged. Verify the replacement CI and device startup separately.
+
+## Regex input
+
+- Home and browser regex rules now accept clipboard text and a single UTF-8 regex file. The 1,024-character truncation was replaced with explicit validation (regex: 32,768; glob: 1,024).
+- A long-pattern core regression test checks that alternatives near the end still match. Check this commit's Android CI and test paste/file selection on a device separately. Signing configuration is unchanged.
